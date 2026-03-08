@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#070b11" />
+  <!-- Sketchware / Android WebView: deshabilita links automáticos -->
+  <meta name="format-detection" content="telephone=no,email=no,address=no" />
+  <title>Pionex Bot · Mobile</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+  <script type="module" src="https://unpkg.com/ionicons@7.4.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.4.0/dist/ionicons/ionicons.js"></script>
+</head>
+<body>
+
+  <!-- ══════════════════  TOP STATUS BAR  ══════════════════ -->
+  <div class="status-bar" id="statusBar">
+    <div class="status-bar-left">
+      <span class="logo-pill"><ion-icon name="diamond-outline"></ion-icon> Pionex</span>
+    </div>
+    <div class="status-bar-right">
+      <span class="conn-indicator" id="connIndicator">
+        <span class="conn-dot disconnected"></span>
+      </span>
+      <button class="icon-btn" id="themeBtn" aria-label="Cambiar tema">
+        <ion-icon name="moon-outline" id="themeIcon"></ion-icon>
+      </button>
+      <button class="icon-btn" id="notifBtn" aria-label="Notificaciones">
+        <ion-icon name="notifications-outline"></ion-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════  PAGE WRAPPER  ══════════════════ -->
+  <div class="page-wrapper" id="pageWrapper">
+
+    <!-- ─────────────────  DASHBOARD  ───────────────────── -->
+    <section class="page active" id="page-dashboard">
+      <div class="page-scroll">
+
+        <!-- Hero prices ticker -->
+        <div class="ticker-scroll-wrap">
+          <div class="ticker-scroll" id="tickerScroll">
+            <!-- Filled by JS -->
+          </div>
+        </div>
+
+        <!-- Portfolio summary card -->
+        <div class="hero-card" id="portfolioCard">
+          <div class="hero-label">Balance Total</div>
+          <div class="hero-amount" id="totalBalance">$—</div>
+          <div class="hero-sub">
+            <span id="portfolioChange" class="change-neutral">—</span>
+            <span class="hero-sub-label">hoy</span>
+          </div>
+          <div class="hero-actions">
+            <button class="pill-btn pill-green" id="quickBuyBtn">
+              <ion-icon name="add-outline"></ion-icon> Comprar
+            </button>
+            <button class="pill-btn pill-red" id="quickSellBtn">
+              <ion-icon name="remove-outline"></ion-icon> Vender
+            </button>
+          </div>
+        </div>
+
+        <!-- Market overview strip -->
+        <div class="section-title">Mercado</div>
+        <div class="market-strip" id="marketStrip">
+          <div class="market-coin-card active" data-symbol="BTC_USDT">
+            <div class="mc-icon mc-btc"><ion-icon name="logo-bitcoin"></ion-icon></div>
+            <div class="mc-info">
+              <span class="mc-name">Bitcoin</span>
+              <span class="mc-sym">BTC</span>
+            </div>
+            <div class="mc-price-wrap">
+              <span class="mc-price" id="mc-BTC_USDT">—</span>
+              <span class="mc-change" id="mcch-BTC_USDT">—</span>
+            </div>
+          </div>
+          <div class="market-coin-card" data-symbol="ETH_USDT">
+            <div class="mc-icon mc-eth"><ion-icon name="logo-ethereum"></ion-icon></div>
+            <div class="mc-info">
+              <span class="mc-name">Ethereum</span>
+              <span class="mc-sym">ETH</span>
+            </div>
+            <div class="mc-price-wrap">
+              <span class="mc-price" id="mc-ETH_USDT">—</span>
+              <span class="mc-change" id="mcch-ETH_USDT">—</span>
+            </div>
+          </div>
+          <div class="market-coin-card" data-symbol="SOL_USDT">
+            <div class="mc-icon mc-sol"><ion-icon name="planet-outline"></ion-icon></div>
+            <div class="mc-info">
+              <span class="mc-name">Solana</span>
+              <span class="mc-sym">SOL</span>
+            </div>
+            <div class="mc-price-wrap">
+              <span class="mc-price" id="mc-SOL_USDT">—</span>
+              <span class="mc-change" id="mcch-SOL_USDT">—</span>
+            </div>
+          </div>
+          <div class="market-coin-card" data-symbol="BNB_USDT">
+            <div class="mc-icon mc-bnb"><ion-icon name="logo-usd"></ion-icon></div>
+            <div class="mc-info">
+              <span class="mc-name">BNB</span>
+              <span class="mc-sym">BNB</span>
+            </div>
+            <div class="mc-price-wrap">
+              <span class="mc-price" id="mc-BNB_USDT">—</span>
+              <span class="mc-change" id="mcch-BNB_USDT">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Market stats row -->
+        <div class="stat-row">
+          <div class="stat-pill">
+            <span class="stat-pill-label">Pares</span>
+            <span class="stat-pill-val" id="dbPairsCount">—</span>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-pill-label">Subiendo</span>
+            <span class="stat-pill-val green" id="dbRising">—</span>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-pill-label">Vol 24h</span>
+            <span class="stat-pill-val" id="dbVol">—</span>
+          </div>
+        </div>
+
+        <!-- Top Gainers / Losers -->
+        <div class="section-title-row">
+          <span class="section-title">Top Movers</span>
+          <div class="section-tabs" id="moverTabs">
+            <button class="stab active" data-tab="gainers">Ganadores</button>
+            <button class="stab" data-tab="losers">Perdedores</button>
+          </div>
+        </div>
+        <div class="movers-list" id="moversList">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+
+        <!-- AI quick analysis banner -->
+        <div class="ai-banner" id="aiQuickBanner">
+          <div class="ai-banner-icon"><ion-icon name="sparkles-outline"></ion-icon></div>
+          <div class="ai-banner-text">
+            <div class="ai-banner-title">AI Trader Cloud</div>
+            <div class="ai-banner-sub">Análisis con Claude, GPT-4o, Gemini y más</div>
+          </div>
+          <button class="ai-banner-btn" id="goToAiBtn">Abrir <ion-icon name="chevron-forward-outline"></ion-icon></button>
+        </div>
+
+      </div><!-- /page-scroll -->
+    </section>
+
+    <!-- ─────────────────  MARKET / CHART  ───────────────── -->
+    <section class="page" id="page-market">
+      <div class="page-scroll">
+
+        <!-- Symbol selector -->
+        <div class="chart-header">
+          <div class="chart-sym-wrap">
+            <button class="sym-select-btn" id="symSelectBtn">
+              <span id="symSelectLabel">BTC/USDT</span>
+              <ion-icon name="chevron-down-outline"></ion-icon>
+            </button>
+          </div>
+          <div class="chart-controls">
+            <div class="interval-row" id="intervalRow">
+              <button class="interval-btn active" data-iv="5M">5m</button>
+              <button class="interval-btn" data-iv="15M">15m</button>
+              <button class="interval-btn" data-iv="1H">1h</button>
+              <button class="interval-btn" data-iv="4H">4h</button>
+              <button class="interval-btn" data-iv="1D">1D</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Price hero row -->
+        <div class="chart-price-row">
+          <span class="cpr-price" id="chartCurrentPrice">—</span>
+          <span class="cpr-change" id="chartCurrentChange">—</span>
+          <span class="cpr-label">24h</span>
+        </div>
+
+        <!-- Candlestick chart -->
+        <div class="chart-wrap card" id="mainChartWrap">
+          <div id="mainChart" style="height:260px;width:100%"></div>
+        </div>
+
+        <!-- Indicator chips -->
+        <div class="ind-chip-row">
+          <button class="ind-chip active" data-ind="none">Limpio</button>
+          <button class="ind-chip" data-ind="sma">SMA 20</button>
+          <button class="ind-chip" data-ind="ema">EMA 20</button>
+          <button class="ind-chip" data-ind="bollinger">BB</button>
+          <button class="ind-chip" data-ind="rsi">RSI</button>
+          <button class="ind-chip" data-ind="macd">MACD</button>
+        </div>
+
+        <!-- Indicator cards row -->
+        <div class="ind-cards-row">
+          <div class="ind-card">
+            <div class="ind-card-label">RSI 14</div>
+            <div class="ind-card-val" id="indRsi">—</div>
+            <div class="ind-card-signal" id="indRsiSig">—</div>
+          </div>
+          <div class="ind-card">
+            <div class="ind-card-label">MACD</div>
+            <div class="ind-card-val" id="indMacd">—</div>
+            <div class="ind-card-signal" id="indMacdSig">—</div>
+          </div>
+          <div class="ind-card">
+            <div class="ind-card-label">BB %B</div>
+            <div class="ind-card-val" id="indBb">—</div>
+            <div class="ind-card-signal" id="indBbSig">—</div>
+          </div>
+          <div class="ind-card">
+            <div class="ind-card-label">Tend EMA</div>
+            <div class="ind-card-val" id="indEma">—</div>
+            <div class="ind-card-signal" id="indEmaSig">—</div>
+          </div>
+        </div>
+
+        <!-- Quick AI analysis for current symbol -->
+        <div class="card" style="margin:0 0 16px">
+          <div class="card-header-row">
+            <span><ion-icon name="sparkles-outline"></ion-icon> Análisis AI</span>
+            <button class="small-btn" id="analysisRefreshBtn">
+              <ion-icon name="refresh-outline"></ion-icon>
+            </button>
+          </div>
+          <div class="ai-analysis-box" id="aiAnalysisBox">
+            <span class="muted">Configura un proveedor AI en Ajustes para ver análisis aquí.</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ─────────────────  AI TRADER  ────────────────────── -->
+    <section class="page" id="page-ai">
+      <div class="page-scroll">
+
+        <!-- Provider selector card -->
+        <div class="card ai-config-card">
+          <div class="ai-cfg-title"><ion-icon name="cloud-outline"></ion-icon> Proveedor AI</div>
+          <div class="provider-grid" id="providerGrid">
+            <button class="prov-btn active" data-prov="claude">
+              <span class="prov-icon">✦</span>
+              <span>Claude</span>
+            </button>
+            <button class="prov-btn" data-prov="openai">
+              <span class="prov-icon">◉</span>
+              <span>OpenAI</span>
+            </button>
+            <button class="prov-btn" data-prov="gemini">
+              <span class="prov-icon">◈</span>
+              <span>Gemini</span>
+            </button>
+            <button class="prov-btn" data-prov="groq">
+              <span class="prov-icon">⚡</span>
+              <span>Groq</span>
+            </button>
+            <button class="prov-btn" data-prov="openrouter">
+              <span class="prov-icon">⊕</span>
+              <span>OpenRouter</span>
+            </button>
+            <button class="prov-btn" data-prov="mistral">
+              <span class="prov-icon">◌</span>
+              <span>Mistral</span>
+            </button>
+          </div>
+
+          <div class="ai-cfg-row">
+            <label class="cfg-label">Modelo</label>
+            <select id="aiModelSelect" class="select-input">
+              <option value="claude-sonnet-4-5">claude-sonnet-4-5</option>
+              <option value="claude-opus-4-5">claude-opus-4-5</option>
+              <option value="claude-3-5-haiku-20241022">claude-3-5-haiku</option>
+            </select>
+          </div>
+
+          <div class="ai-cfg-row" id="apiKeyRow">
+            <label class="cfg-label">API Key</label>
+            <div class="input-with-eye">
+              <input type="password" id="aiApiKeyInput" class="text-input" placeholder="sk-ant-..." autocomplete="off" />
+              <button class="eye-btn" id="eyeBtn" type="button"><ion-icon name="eye-outline"></ion-icon></button>
+            </div>
+          </div>
+          <button class="btn-primary w-full" id="saveProviderBtn">
+            <ion-icon name="checkmark-outline"></ion-icon> Guardar configuración
+          </button>
+        </div>
+
+        <!-- Symbol multi-select + trade mode -->
+        <div class="card">
+          <div class="card-header-row">
+            <span>Pares a analizar</span>
+            <button class="small-btn" id="addSymbolBtn"><ion-icon name="add-outline"></ion-icon></button>
+          </div>
+          <div class="sym-chips" id="aiSymbolChips">
+            <span class="sym-chip active" data-sym="BTC_USDT">BTC/USDT <button class="chip-remove">×</button></span>
+            <span class="sym-chip active" data-sym="ETH_USDT">ETH/USDT <button class="chip-remove">×</button></span>
+            <span class="sym-chip active" data-sym="SOL_USDT">SOL/USDT <button class="chip-remove">×</button></span>
+          </div>
+
+          <div class="ai-cfg-row">
+            <label class="cfg-label">Modo de análisis</label>
+            <div class="mode-btn-row" id="tradeModeRow">
+              <button class="mode-btn active" data-mode="scalping">⚡ Scalping</button>
+              <button class="mode-btn" data-mode="daytrading">📅 Day</button>
+              <button class="mode-btn" data-mode="swingtrading">🌊 Swing</button>
+              <button class="mode-btn" data-mode="longterm">📈 Long</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Run analysis button -->
+        <button class="btn-primary w-full big-btn" id="runAnalysisBtn">
+          <ion-icon name="sparkles-outline"></ion-icon>
+          Analizar con AI
+        </button>
+
+        <!-- AI Chat / Result -->
+        <div class="card ai-chat-card" id="aiChatCard">
+          <div class="ai-chat-header">
+            <span id="aiChatTitle">Análisis</span>
+            <span class="ai-chat-badge" id="aiProviderBadge">Claude</span>
+          </div>
+          <div class="ai-chat-messages" id="aiChatMessages">
+            <div class="ai-message ai-message-system">
+              <ion-icon name="information-circle-outline"></ion-icon>
+              Configura tu proveedor AI y presiona <strong>Analizar</strong> para obtener señales de trading basadas en indicadores técnicos en tiempo real.
+            </div>
+          </div>
+
+          <!-- Custom question input -->
+          <div class="chat-input-row">
+            <input type="text" id="chatQuestionInput" class="text-input" placeholder="Pregunta algo sobre el mercado..." />
+            <button class="send-btn" id="sendChatBtn">
+              <ion-icon name="send-outline"></ion-icon>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── Bot Autónomo ─────────────────────────────────────── -->
+        <div class="card bot-card" id="autoTradeCard">
+
+          <!-- Header -->
+          <div class="card-header-row">
+            <span><ion-icon name="hardware-chip-outline"></ion-icon> Bot Autónomo Cloud AI</span>
+            <span class="badge" id="botStatusBadge">Detenido</span>
+          </div>
+
+          <!-- DRY RUN warning / toggle -->
+          <div class="dryrun-banner" id="dryRunBanner">
+            <div class="dr-row">
+              <div>
+                <strong>🔵 Modo simulación (DRY RUN)</strong>
+                <div class="dr-sub">Sin órdenes reales. Seguro para probar la estrategia.</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="dryRunToggle" checked />
+                <span class="toggle-knob"></span>
+              </label>
+            </div>
+            <div class="real-warning" id="realModeWarning" style="display:none">
+              ⚠️ <strong>MODO REAL ACTIVO</strong> — El bot ejecutará órdenes reales con tu capital. Asegúrate de haber configurado las API keys en Ajustes.
+            </div>
+          </div>
+
+          <!-- Config grid -->
+          <div class="bot-cfg-grid">
+
+            <div class="cfg-field">
+              <label class="cfg-label">Modo</label>
+              <select id="botMode" class="select-input">
+                <option value="autonomous">Autónomo</option>
+                <option value="daytrading">Day Trading</option>
+                <option value="swingtrading">Swing Trading</option>
+                <option value="scalping">Scalping</option>
+                <option value="longterm">Largo Plazo</option>
+              </select>
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Intervalo</label>
+              <select id="botInterval" class="select-input">
+                <option value="1M">1 min</option>
+                <option value="5M">5 min</option>
+                <option value="15M" selected>15 min</option>
+                <option value="1H">1 hora</option>
+                <option value="4H">4 horas</option>
+              </select>
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Ciclo (min)</label>
+              <input type="number" id="botCycleMinutes" class="text-input" value="5" min="1" max="240" />
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Máx. trades/día</label>
+              <input type="number" id="botMaxTrades" class="text-input" value="10" min="1" max="50" />
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Posición máx. (USDT)</label>
+              <input type="number" id="botMaxPosition" class="text-input" value="100" min="10" max="500" />
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Nivel de riesgo</label>
+              <select id="botRiskLevel" class="select-input">
+                <option value="conservative">Conservador</option>
+                <option value="moderate" selected>Moderado</option>
+                <option value="aggressive">Agresivo</option>
+              </select>
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Stop Loss (%)</label>
+              <input type="number" id="botStopLoss" class="text-input" value="3" min="0.5" max="20" step="0.5" />
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Take Profit (%)</label>
+              <input type="number" id="botTakeProfit" class="text-input" value="5" min="1" max="30" step="0.5" />
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Pérd. diaria máx. (%)</label>
+              <input type="number" id="botMaxDailyLoss" class="text-input" value="5" min="1" max="20" step="0.5" />
+            </div>
+
+            <div class="cfg-field">
+              <label class="cfg-label">Ganancia mínima USDT</label>
+              <input type="number" id="botMinProfit" class="text-input" value="0.33" min="0" step="0.01" />
+            </div>
+
+          </div>
+
+          <!-- Symbols (hidden in autonomous mode) -->
+          <div id="botSymbolsSection">
+            <label class="cfg-label">Pares a operar</label>
+            <div class="bot-sym-chips" id="botSymChips">
+              <div class="bot-sym-chip active" data-sym="BTC_USDT">BTC</div>
+              <div class="bot-sym-chip active" data-sym="ETH_USDT">ETH</div>
+              <div class="bot-sym-chip" data-sym="SOL_USDT">SOL</div>
+              <div class="bot-sym-chip" data-sym="BNB_USDT">BNB</div>
+              <div class="bot-sym-chip" data-sym="XRP_USDT">XRP</div>
+              <div class="bot-sym-chip" data-sym="ADA_USDT">ADA</div>
+              <div class="bot-sym-chip" data-sym="DOGE_USDT">DOGE</div>
+              <div class="bot-sym-chip" data-sym="LINK_USDT">LINK</div>
+            </div>
+            <div class="sym-note">En modo Autónomo el bot selecciona los mejores pares automáticamente.</div>
+          </div>
+
+          <!-- Control buttons -->
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn-green flex-1" id="startBotBtn">
+              <ion-icon name="play-outline"></ion-icon> Iniciar Bot
+            </button>
+            <button class="btn-red flex-1" id="stopBotBtn" disabled>
+              <ion-icon name="stop-outline"></ion-icon> Detener
+            </button>
+          </div>
+
+          <!-- Session stats -->
+          <div class="bot-stats-grid" id="botStatsGrid">
+            <div class="bst-item"><div class="bst-val" id="statCycles">0</div><div class="bst-lbl">Ciclos</div></div>
+            <div class="bst-item"><div class="bst-val green" id="statBuys">0</div><div class="bst-lbl">Compras</div></div>
+            <div class="bst-item"><div class="bst-val red" id="statSells">0</div><div class="bst-lbl">Ventas</div></div>
+            <div class="bst-item"><div class="stat-val" id="statPnL">$0.00</div><div class="bst-lbl">PnL</div></div>
+            <div class="bst-item"><div class="bst-val" id="statWinRate">—</div><div class="bst-lbl">Win Rate</div></div>
+            <div class="bst-item"><div class="bst-val" id="statVirtualUsdt">$1000</div><div class="bst-lbl">Saldo sim</div></div>
+          </div>
+
+          <!-- Open positions -->
+          <div class="section-title-sm"><ion-icon name="albums-outline"></ion-icon> Posiciones abiertas</div>
+          <div class="bot-positions-panel" id="botPositionsPanel">
+            <div class="empty-state"><ion-icon name="albums-outline"></ion-icon><span>Sin posiciones abiertas</span></div>
+          </div>
+
+          <!-- Trade history -->
+          <div class="section-title-sm"><ion-icon name="time-outline"></ion-icon> Últimos trades</div>
+          <div class="bot-trade-history" id="botTradeHistory">
+            <div class="empty-state">Sin historial</div>
+          </div>
+
+          <!-- Log -->
+          <div class="section-title-sm"><ion-icon name="terminal-outline"></ion-icon> Log del bot</div>
+          <div class="bot-log" id="botLog"></div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ─────────────────  TRADING  ──────────────────────── -->
+    <section class="page" id="page-trading">
+      <div class="page-scroll">
+
+        <!-- Order form -->
+        <div class="card">
+          <div class="card-header-row">
+            <span>Nueva Orden</span>
+            <div class="order-type-tabs">
+              <button class="otab active" data-type="BUY">Comprar</button>
+              <button class="otab" data-type="SELL">Vender</button>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label class="cfg-label">Par</label>
+            <select id="orderSymbol" class="select-input">
+              <option value="BTC_USDT">BTC/USDT</option>
+              <option value="ETH_USDT">ETH/USDT</option>
+              <option value="SOL_USDT">SOL/USDT</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label class="cfg-label">Cantidad (USDT)</label>
+            <div class="input-with-max">
+              <input type="number" id="orderAmount" class="text-input" placeholder="100" min="1" step="1" />
+              <div class="amount-presets">
+                <button class="preset-btn" data-pct="25">25%</button>
+                <button class="preset-btn" data-pct="50">50%</button>
+                <button class="preset-btn" data-pct="75">75%</button>
+                <button class="preset-btn" data-pct="100">Max</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label class="cfg-label">Stop Loss (%)</label>
+            <input type="number" id="orderSL" class="text-input" placeholder="2" min="0" step="0.1" />
+          </div>
+          <div class="form-field">
+            <label class="cfg-label">Take Profit (%)</label>
+            <input type="number" id="orderTP" class="text-input" placeholder="5" min="0" step="0.1" />
+          </div>
+
+          <div class="order-preview" id="orderPreview">
+            <span class="op-row"><span>Precio actual:</span><span id="opCurrentPrice">—</span></span>
+            <span class="op-row"><span>SL estimado:</span><span id="opSLPrice" class="red">—</span></span>
+            <span class="op-row"><span>TP estimado:</span><span id="opTPPrice" class="green">—</span></span>
+          </div>
+
+          <button class="btn-primary w-full big-btn" id="placeOrderBtn">
+            Confirmar Compra
+          </button>
+        </div>
+
+        <!-- Open positions -->
+        <div class="section-title">Posiciones abiertas</div>
+        <div class="positions-list" id="positionsList">
+          <div class="empty-state">
+            <ion-icon name="document-outline"></ion-icon>
+            <span>Sin posiciones activas</span>
+          </div>
+        </div>
+
+        <!-- Recent orders -->
+        <div class="section-title">Órdenes recientes</div>
+        <div class="orders-list" id="ordersList">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ─────────────────  SETTINGS  ─────────────────────── -->
+    <section class="page" id="page-settings">
+      <div class="page-scroll">
+
+        <!-- Server config -->
+        <div class="settings-group">
+          <div class="settings-group-title">Servidor</div>
+          <div class="settings-item">
+            <label class="cfg-label">URL del backend</label>
+            <input type="text" id="serverUrl" class="text-input" value="http://localhost:8000" placeholder="http://localhost:8000" />
+          </div>
+          <button class="btn-outline w-full" id="testConnectionBtn">
+            <ion-icon name="wifi-outline"></ion-icon> Probar conexión
+          </button>
+          <div class="conn-status-msg" id="connStatusMsg"></div>
+        </div>
+
+        <!-- Pionex API Keys -->
+        <div class="settings-group">
+          <div class="settings-group-title">Pionex API</div>
+          <div class="settings-item">
+            <label class="cfg-label">API Key</label>
+            <input type="password" id="settingsPionexKey" class="text-input" placeholder="tu-api-key" autocomplete="off" />
+          </div>
+          <div class="settings-item">
+            <label class="cfg-label">API Secret</label>
+            <input type="password" id="settingsPionexSecret" class="text-input" placeholder="tu-api-secret" autocomplete="off" />
+          </div>
+        </div>
+
+        <!-- Cloud AI settings (per provider) -->
+        <div class="settings-group">
+          <div class="settings-group-title">Cloud AI Keys</div>
+          <div class="ai-key-list" id="aiKeyList">
+            <!-- Filled by JS -->
+          </div>
+          <p class="settings-note">
+            <ion-icon name="lock-closed-outline"></ion-icon>
+            Las claves se guardan solo en este dispositivo (localStorage). Nunca se envían a nuestros servidores.
+          </p>
+        </div>
+
+        <!-- Seguridad — Cifrado API Keys -->
+        <div class="settings-group">
+          <div class="settings-group-title">Seguridad — Cifrado AES-256</div>
+          <div class="settings-item">
+            <label class="cfg-label">Estado</label>
+            <span id="cryptoStatusLabel" class="crypto-status-lbl">—</span>
+          </div>
+          <div class="settings-item">
+            <label class="cfg-label">PIN nuevo</label>
+            <input type="password" id="newPinInput" class="text-input"
+              placeholder="Mín. 4 caracteres" inputmode="numeric" maxlength="16"
+              autocomplete="new-password" />
+          </div>
+          <div class="settings-item" id="currentPinRow" style="display:none">
+            <label class="cfg-label">PIN actual</label>
+            <input type="password" id="currentPinInput" class="text-input"
+              placeholder="Confirmar PIN vigente" inputmode="numeric" maxlength="16"
+              autocomplete="current-password" />
+          </div>
+          <button class="btn-outline w-full" id="setPinBtn">
+            <ion-icon name="key-outline"></ion-icon> Establecer / Cambiar PIN
+          </button>
+          <button class="btn-outline btn-danger w-full" id="removePinBtn" style="display:none;margin-top:8px">
+            <ion-icon name="trash-outline"></ion-icon> Quitar cifrado
+          </button>
+          <p class="settings-note">
+            <ion-icon name="shield-checkmark-outline"></ion-icon>
+            AES-GCM 256-bit &middot; PBKDF2-SHA256 200&thinsp;000 iter. &middot; El PIN nunca sale del dispositivo.
+          </p>
+        </div>
+
+        <!-- Theme -->
+        <div class="settings-group">
+          <div class="settings-group-title">Apariencia</div>
+          <div class="settings-toggle-row">
+            <span>Tema oscuro</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="darkModeToggle" checked />
+              <span class="toggle-knob"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Notification settings -->
+        <div class="settings-group">
+          <div class="settings-group-title">Notificaciones</div>
+          <div class="settings-toggle-row">
+            <span>Alertas de precio</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="priceAlertsToggle" />
+              <span class="toggle-knob"></span>
+            </label>
+          </div>
+          <div class="settings-toggle-row">
+            <span>Señales AI</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="aiSignalsToggle" checked />
+              <span class="toggle-knob"></span>
+            </label>
+          </div>
+        </div>
+
+        <button class="btn-primary w-full" id="saveSettingsBtn">
+          <ion-icon name="save-outline"></ion-icon> Guardar ajustes
+        </button>
+
+        <div class="app-version">Pionex Bot · Mobile v1.0 · 2025</div>
+
+      </div>
+    </section>
+
+  </div><!-- /page-wrapper -->
+
+  <!-- ══════════════════  BOTTOM NAV  ══════════════════ -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="bn-item active" data-page="dashboard">
+      <ion-icon name="stats-chart-outline"></ion-icon>
+      <span>Inicio</span>
+    </button>
+    <button class="bn-item" data-page="market">
+      <ion-icon name="bar-chart-outline"></ion-icon>
+      <span>Mercado</span>
+    </button>
+    <button class="bn-item bn-ai" data-page="ai">
+      <div class="bn-ai-pill">
+        <ion-icon name="sparkles-outline"></ion-icon>
+      </div>
+      <span>AI</span>
+    </button>
+    <button class="bn-item" data-page="trading">
+      <ion-icon name="swap-horizontal-outline"></ion-icon>
+      <span>Trading</span>
+    </button>
+    <button class="bn-item" data-page="settings">
+      <ion-icon name="settings-outline"></ion-icon>
+      <span>Ajustes</span>
+    </button>
+  </nav>
+
+  <!-- ══════════════════  MODALS  ══════════════════ -->
+
+  <!-- Symbol picker modal -->
+  <div class="modal-overlay" id="symPickerOverlay">
+    <div class="bottom-sheet" id="symPickerSheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Seleccionar par</div>
+      <input type="search" id="symSearch" class="text-input" placeholder="Buscar BTC, ETH..." />
+      <div class="sym-picker-list" id="symPickerList"></div>
+    </div>
+  </div>
+
+  <!-- Confirm order modal -->
+  <div class="modal-overlay" id="confirmOrderOverlay">
+    <div class="bottom-sheet" id="confirmOrderSheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="confirmOrderTitle">Confirmar orden</div>
+      <div class="confirm-details" id="confirmOrderDetails"></div>
+      <div class="btn-row">
+        <button class="btn-outline flex-1" id="cancelOrderBtn">Cancelar</button>
+        <button class="btn-primary flex-1" id="executeOrderBtn">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ══════  PIN UNLOCK OVERLAY  ══════ -->
+  <div class="pin-overlay" id="pinOverlay">
+    <div class="pin-modal">
+      <div class="pin-modal-icon"><ion-icon name="lock-closed-outline"></ion-icon></div>
+      <div class="pin-modal-title">API Keys cifradas</div>
+      <div class="pin-modal-sub">Introduce tu PIN para descifrar las claves</div>
+      <input type="password" id="pinInput" class="text-input pin-input"
+        placeholder="PIN" inputmode="numeric" maxlength="16" autocomplete="off" />
+      <button class="btn-primary w-full" id="pinUnlockBtn">
+        <ion-icon name="lock-open-outline"></ion-icon> Desbloquear
+      </button>
+      <div class="pin-error" id="pinError"></div>
+      <button class="pin-skip-btn" id="pinSkipBtn">Continuar sin descifrar</button>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/crypto-store.js"></script>
+  <script src="js/ai-cloud.js"></script>
+  <script src="js/bot-autonomous.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

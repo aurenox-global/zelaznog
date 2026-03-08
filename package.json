@@ -1,0 +1,17 @@
+{
+  "name": "pionex-trader",
+  "version": "1.0.0",
+  "description": "Pionex Bot Mobile Frontend — CORS Proxy",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js",
+    "dev":   "node proxy.js",
+    "start:py": "python3 proxy.py"
+  },
+  "note": "Sin Node.js: usa  python3 proxy.py  (stdlib, cero deps)",
+  "engines": {
+    "node": ">=16"
+  },
+  "keywords": ["trading", "pionex", "crypto", "proxy"],
+  "license": "MIT"
+}

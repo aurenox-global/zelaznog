@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Pionex Bot — Mobile Frontend App
+   Experimento Trader — Mobile Frontend App
    Connects to the local FastAPI backend (localhost:8000)
    Uses CloudAI module for AI analysis via cloud providers
    ═══════════════════════════════════════════════════════════════ */
@@ -467,11 +467,15 @@ function renderSymPickerList(filter) {
 
 /* ── Orders & Positions ──────────────────────────────────────── */
 async function loadOrders() {
-  try {
-    const data = await apiFetch('/api/balances');
-    // Show positions from balance
-    renderBalanceAsPositions(data);
-  } catch {}
+  if (APP.directMode) {
+    const list = document.getElementById('positionsList');
+    if (list) list.innerHTML = `<div class="empty-state"><ion-icon name="cloud-offline-outline"></ion-icon><span>Balance no disponible en modo directo.<br>Configura un servidor proxy con tu API de Pionex.</span></div>`;
+  } else {
+    try {
+      const data = await apiFetch('/api/balances');
+      renderBalanceAsPositions(data);
+    } catch {}
+  }
 
   // Try to get recent orders from DB
   try {

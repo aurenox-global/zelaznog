@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Pionex Bot — Cloud AI Module
+   Experimento Trader — Cloud AI Module
    Supports: Claude (Anthropic), OpenAI, Gemini, Groq,
              OpenRouter, Mistral
    All calls are made client-side using the stored API key.
@@ -161,7 +161,7 @@ const CloudAI = (() => {
             'HTTP-Referer':   window.location.origin && window.location.origin !== 'null'
                               ? window.location.origin
                               : 'https://trader-app',
-            'X-Title':        'Pionex Bot',
+            'X-Title':        'Experimento Trader',
           },
           body: JSON.stringify({
             model:      config.model,

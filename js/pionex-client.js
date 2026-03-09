@@ -15,6 +15,28 @@ const PionexClient = (() => {
 
   const BASE    = 'https://api.pionex.com/api/v1';
   const CPROXY  = 'https://corsproxy.io/?url=';   // fallback CORS proxy (solo datos públicos)
+  const ORDERS_LS = 'pionex_direct_orders';
+  const CREDS_LS = 'pionex_api_creds';
+  const LAST_REAL_ORDER_TS_LS = 'pionex_last_real_order_ts';
+
+  async function _getPionexCreds() {
+    try {
+      if (typeof CryptoStore !== 'undefined') {
+        const raw = await CryptoStore.load(CREDS_LS);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const apiKey = String(parsed?.apiKey || '').trim();
+          const apiSecret = String(parsed?.apiSecret || '').trim();
+          if (apiKey || apiSecret) return { apiKey, apiSecret };
+        }
+      }
+    } catch {}
+
+    return {
+      apiKey: (localStorage.getItem('pionex_api_key') || '').trim(),
+      apiSecret: (localStorage.getItem('pionex_api_secret') || '').trim(),
+    };
+  }
 
   /* ── Fetch con fallback CORS automático ────────────────────── */
   async function request(apiPath) {
@@ -159,8 +181,7 @@ const PionexClient = (() => {
 
   /* ── Balances autenticados ──────────────────────────────────── */
   async function getBalance() {
-    const apiKey    = localStorage.getItem('pionex_api_key')    || '';
-    const apiSecret = localStorage.getItem('pionex_api_secret') || '';
+    const { apiKey, apiSecret } = await _getPionexCreds();
     if (!apiKey || !apiSecret) {
       const e = new Error('NO_KEYS');
       throw e;
@@ -186,13 +207,108 @@ const PionexClient = (() => {
     return { balances };
   }
 
+  function _loadDirectOrders() {
+    try {
+      const raw = localStorage.getItem(ORDERS_LS);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function _saveDirectOrder(entry) {
+    try {
+      const cur = _loadDirectOrders();
+      cur.unshift(entry);
+      localStorage.setItem(ORDERS_LS, JSON.stringify(cur.slice(0, 100)));
+    } catch {}
+  }
+
+  async function createOrder(payload = {}) {
+    const { apiKey, apiSecret } = await _getPionexCreds();
+    if (!apiKey || !apiSecret) {
+      throw new Error('Configura API Key y API Secret de Pionex para operar en real.');
+    }
+
+    const side = String(payload.side || '').toUpperCase();
+    if (!['BUY', 'SELL'].includes(side)) {
+      throw new Error('Lado de orden inválido. Debe ser BUY o SELL.');
+    }
+
+    const orderBody = {
+      symbol: payload.symbol,
+      side,
+      type: payload.type || 'MARKET',
+    };
+
+    if (payload.amount != null && Number(payload.amount) > 0) {
+      orderBody.amount = String(payload.amount);
+    }
+    if (payload.size != null && Number(payload.size) > 0) {
+      orderBody.size = String(payload.size);
+    }
+    if (!orderBody.amount && !orderBody.size) {
+      throw new Error('Orden inválida: falta amount o size.');
+    }
+
+    const timestamp = Date.now().toString();
+    const queryString = `timestamp=${timestamp}`;
+    async function submitWithSignature(basePayload) {
+      const signature = await _hmacHex(apiSecret, basePayload);
+      const resp = await fetch(`${BASE}/trade/order?${queryString}&signature=${signature}`, {
+        method: 'POST',
+        headers: {
+          'PIONEX-KEY': apiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(orderBody),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await resp.json().catch(() => ({}));
+      const ok = resp.ok && data?.result !== false;
+      return { ok, resp, data };
+    }
+
+    // Algunos entornos usan firma sobre query+body y otros solo query.
+    let submit = await submitWithSignature(`${queryString}${JSON.stringify(orderBody)}`);
+    if (!submit.ok) {
+      const msg = String(submit.data?.message || '').toLowerCase();
+      if (msg.includes('signature') || submit.resp.status === 401 || submit.resp.status === 403) {
+        submit = await submitWithSignature(queryString);
+      }
+    }
+    if (!submit.ok) {
+      throw new Error(submit.data?.message || `HTTP ${submit.resp.status}`);
+    }
+
+    const data = submit.data;
+
+    _saveDirectOrder({
+      timestamp: Date.now(),
+      symbol: orderBody.symbol,
+      side: orderBody.side,
+      status: 'SENT',
+      price: payload.price ?? null,
+      amount: orderBody.amount ?? null,
+      size: orderBody.size ?? null,
+      orderId: data?.data?.orderId || null,
+      source: 'direct',
+    });
+    localStorage.setItem(LAST_REAL_ORDER_TS_LS, String(Date.now()));
+
+    return data?.result !== undefined ? data : { result: true, data };
+  }
+
   /**
    * Router único — acepta el mismo path+querystring que apiFetch().
    */
-  async function handle(path) {
+  async function handle(path, opts = {}) {
     const sep      = path.indexOf('?');
     const pathname = sep >= 0 ? path.slice(0, sep) : path;
     const q        = Object.fromEntries(new URLSearchParams(sep >= 0 ? path.slice(sep + 1) : ''));
+    const method   = String(opts.method || 'GET').toUpperCase();
 
     if (pathname === '/api/health')     return { status: 'ok', mode: 'direct' };
     if (pathname === '/api/tickers')    return getTickers();
@@ -200,8 +316,13 @@ const PionexClient = (() => {
     if (pathname === '/api/indicators') return getIndicators(q.symbol || 'BTC_USDT', q.interval || '15M');
     if (pathname === '/api/symbols')    return getTickers().then(list => list.map(t => t.symbol));
     if (pathname === '/api/balances')   return getBalance();
+    if (pathname === '/api/order' && method === 'POST') {
+      const body = typeof opts.body === 'string' ? JSON.parse(opts.body || '{}') : (opts.body || {});
+      return createOrder(body);
+    }
 
-    if (pathname === '/api/orders' || pathname === '/api/ai/trades') return { orders: [] };
+    if (pathname === '/api/orders') return { orders: _loadDirectOrders() };
+    if (pathname === '/api/ai/trades') return { trades: _loadDirectOrders() };
     if (pathname.startsWith('/api/')) return [];
 
     throw new Error(`Ruta no soportada en modo directo: ${pathname}`);

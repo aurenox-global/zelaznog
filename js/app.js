@@ -34,6 +34,7 @@ const TraderApp = (() => {
     setServer(url) {
       if (!url) return;
       APP.serverUrl = url.replace(/\/$/, '');
+      APP.directMode = !APP.serverUrl;
       localStorage.setItem('pionex_server', APP.serverUrl);
     },
     /** Vibración háptica (usa la API nativa si está disponible) */
@@ -56,8 +57,8 @@ window.TraderApp = TraderApp;
 
 /* ── Config & State ──────────────────────────────────────────── */
 const APP = {
-  serverUrl: localStorage.getItem('pionex_server') || '',
-  directMode: true,    // acceso directo a api.pionex.com (GitHub Pages)
+  serverUrl: (localStorage.getItem('pionex_server') || '').trim().replace(/\/$/, ''),
+  directMode: !((localStorage.getItem('pionex_server') || '').trim()), // true = acceso directo
   currentPage: localStorage.getItem('pionex_page') || 'dashboard',
   selectedSymbol: localStorage.getItem('pionex_sym') || 'BTC_USDT',
   selectedInterval: '15M',
@@ -70,6 +71,173 @@ const APP = {
   orderSide: 'BUY',
   moverTab: 'gainers',
 };
+
+const RISK_DEFAULTS = {
+  realTradingEnabled: false,
+  killSwitch: true,
+  maxOrderUsdt: 100,
+  orderCooldownSec: 45,
+  requirePhraseConfirm: true,
+  checklist: {
+    apiPerm: false,
+    ipWhitelist: false,
+    smallSize: false,
+    emergencyPlan: false,
+  },
+};
+
+const LS_PIONEX_CREDS = 'pionex_api_creds';
+const LS_LAST_REAL_ORDER_TS = 'pionex_last_real_order_ts';
+
+async function getPionexCredentials() {
+  try {
+    if (typeof CryptoStore !== 'undefined') {
+      const raw = await CryptoStore.load(LS_PIONEX_CREDS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const apiKey = String(parsed?.apiKey || '').trim();
+        const apiSecret = String(parsed?.apiSecret || '').trim();
+        if (apiKey || apiSecret) return { apiKey, apiSecret };
+      }
+    }
+  } catch {}
+
+  const apiKey = (localStorage.getItem('pionex_api_key') || '').trim();
+  const apiSecret = (localStorage.getItem('pionex_api_secret') || '').trim();
+  return { apiKey, apiSecret };
+}
+
+async function savePionexCredentials({ apiKey, apiSecret }) {
+  const clean = {
+    apiKey: String(apiKey || '').trim(),
+    apiSecret: String(apiSecret || '').trim(),
+  };
+
+  if (clean.apiKey || clean.apiSecret) {
+    if (typeof CryptoStore !== 'undefined') {
+      await CryptoStore.save(LS_PIONEX_CREDS, JSON.stringify(clean));
+    } else {
+      localStorage.setItem(LS_PIONEX_CREDS, JSON.stringify(clean));
+    }
+  } else {
+    localStorage.removeItem(LS_PIONEX_CREDS);
+  }
+
+  // Cleanup legacy plaintext keys.
+  localStorage.removeItem('pionex_api_key');
+  localStorage.removeItem('pionex_api_secret');
+}
+
+function getLastRealOrderTs() {
+  return parseInt(localStorage.getItem(LS_LAST_REAL_ORDER_TS) || '0', 10) || 0;
+}
+
+function markRealOrderTimestamp(ts = Date.now()) {
+  localStorage.setItem(LS_LAST_REAL_ORDER_TS, String(ts));
+}
+
+function getRiskSettings() {
+  try {
+    const raw = localStorage.getItem('pionex_risk_controls');
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      ...RISK_DEFAULTS,
+      ...parsed,
+      checklist: { ...RISK_DEFAULTS.checklist, ...(parsed?.checklist || {}) },
+    };
+  } catch {
+    return { ...RISK_DEFAULTS, checklist: { ...RISK_DEFAULTS.checklist } };
+  }
+}
+
+function saveRiskSettings(settings) {
+  localStorage.setItem('pionex_risk_controls', JSON.stringify(settings));
+}
+
+function isChecklistComplete(checklist = {}) {
+  return Boolean(checklist.apiPerm && checklist.ipWhitelist && checklist.smallSize && checklist.emergencyPlan);
+}
+
+function renderRiskSettings() {
+  const rs = getRiskSettings();
+  const setChecked = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!val;
+  };
+  const maxEl = document.getElementById('maxOrderUsdt');
+  if (maxEl) maxEl.value = String(rs.maxOrderUsdt || RISK_DEFAULTS.maxOrderUsdt);
+  const cdEl = document.getElementById('orderCooldownSec');
+  if (cdEl) cdEl.value = String(rs.orderCooldownSec ?? RISK_DEFAULTS.orderCooldownSec);
+
+  setChecked('realTradingEnabled', rs.realTradingEnabled);
+  setChecked('realKillSwitch', rs.killSwitch);
+  setChecked('requirePhraseConfirm', rs.requirePhraseConfirm);
+  setChecked('chkApiPerm', rs.checklist?.apiPerm);
+  setChecked('chkIpWhitelist', rs.checklist?.ipWhitelist);
+  setChecked('chkSmallSize', rs.checklist?.smallSize);
+  setChecked('chkEmergencyPlan', rs.checklist?.emergencyPlan);
+
+  const status = document.getElementById('riskStatusLine');
+  if (status) {
+    const blocked = rs.killSwitch || !rs.realTradingEnabled;
+    const missing = isChecklistComplete(rs.checklist) ? '' : 'Checklist incompleto';
+    status.className = `risk-status-line ${blocked ? 'risk-blocked' : 'risk-open'}`;
+    status.textContent = blocked
+      ? `Trading real bloqueado${missing ? ` • ${missing}` : ''}`
+      : `Trading real habilitado${missing ? ` • ${missing}` : ''}`;
+  }
+}
+
+function collectRiskSettingsFromUI() {
+  const safeNum = (v, fb) => {
+    const n = parseFloat(v);
+    return isNaN(n) ? fb : n;
+  };
+  return {
+    realTradingEnabled: document.getElementById('realTradingEnabled')?.checked ?? false,
+    killSwitch: document.getElementById('realKillSwitch')?.checked ?? true,
+    maxOrderUsdt: Math.max(1, safeNum(document.getElementById('maxOrderUsdt')?.value, 100)),
+    orderCooldownSec: Math.max(0, safeNum(document.getElementById('orderCooldownSec')?.value, 45)),
+    requirePhraseConfirm: document.getElementById('requirePhraseConfirm')?.checked ?? true,
+    checklist: {
+      apiPerm: document.getElementById('chkApiPerm')?.checked ?? false,
+      ipWhitelist: document.getElementById('chkIpWhitelist')?.checked ?? false,
+      smallSize: document.getElementById('chkSmallSize')?.checked ?? false,
+      emergencyPlan: document.getElementById('chkEmergencyPlan')?.checked ?? false,
+    },
+  };
+}
+
+async function preflightRealTrading({ amountUsdt, context, enforceCooldown = true }) {
+  const rs = getRiskSettings();
+  if (!rs.realTradingEnabled) return { ok: false, error: 'Trading real no habilitado en Ajustes.' };
+  if (rs.killSwitch) return { ok: false, error: 'Kill switch activo. Desactivalo en Ajustes para operar real.' };
+  if (!isChecklistComplete(rs.checklist)) return { ok: false, error: 'Checklist de go-live incompleto en Ajustes.' };
+
+  const { apiKey, apiSecret } = await getPionexCredentials();
+  if (!apiKey || !apiSecret) return { ok: false, error: 'Faltan API key/secret de Pionex.' };
+
+  if (amountUsdt > rs.maxOrderUsdt) {
+    return { ok: false, error: `Monto excede limite por orden ($${rs.maxOrderUsdt}).` };
+  }
+
+  if (enforceCooldown && rs.orderCooldownSec > 0) {
+    const lastTs = getLastRealOrderTs();
+    const waitMs = rs.orderCooldownSec * 1000 - (Date.now() - lastTs);
+    if (waitMs > 0) {
+      return { ok: false, error: `Cooldown activo. Espera ${Math.ceil(waitMs / 1000)}s para la siguiente orden real.` };
+    }
+  }
+
+  if (rs.requirePhraseConfirm) {
+    const phrase = 'OPERAR REAL';
+    const typed = prompt(`Confirmacion de seguridad para ${context}: escribe \"${phrase}\"`);
+    if (!typed || typed.trim().toUpperCase() !== phrase) {
+      return { ok: false, error: 'Confirmacion manual cancelada.' };
+    }
+  }
+  return { ok: true };
+}
 
 /* ── Utility ─────────────────────────────────────────────────── */
 function fmt(n, d = 2) {
@@ -94,12 +262,19 @@ function signClass(n)  { return parseFloat(n) >= 0 ? 'green' : 'red'; }
 function signPrefix(n) { return parseFloat(n) >= 0 ? '+' : ''; }
 
 async function apiFetch(path, opts = {}) {
-  // Modo directo: rutas GET sin body van al cliente Pionex en el browser
-  if (APP.directMode && !opts.method && typeof PionexClient !== 'undefined') {
-    return PionexClient.handle(path);
+  const method = (opts.method || 'GET').toUpperCase();
+
+  // Modo directo: delega TODAS las rutas soportadas (incluye /api/order en POST)
+  if (APP.directMode && typeof PionexClient !== 'undefined') {
+    return PionexClient.handle(path, { ...opts, method });
   }
+
+  if (!APP.serverUrl) {
+    throw new Error('No hay proxy configurado. Define una URL en Ajustes o activa modo directo.');
+  }
+
   const url = APP.serverUrl + path;
-  const resp = await fetch(url, { ...opts, signal: AbortSignal.timeout(12000) });
+  const resp = await fetch(url, { ...opts, method, signal: AbortSignal.timeout(12000) });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw new Error(err?.detail || `HTTP ${resp.status}`);
@@ -136,6 +311,7 @@ function navigateTo(pageId) {
 }
 
 function onPageEnter(pageId) {
+  if (pageId === 'dashboard') loadOrders();
   if (pageId === 'market') loadChart();
   if (pageId === 'trading') loadOrders();
   if (pageId === 'settings') renderSettingsPage();
@@ -468,12 +644,13 @@ async function loadOrders() {
     const data = await apiFetch('/api/balances');
     renderBalanceAsPositions(data);
   } catch (e) {
-    if (list) {
-      if (e.message === 'NO_KEYS') {
-        list.innerHTML = `<div class="empty-state"><ion-icon name="key-outline"></ion-icon><span>Configura tus Pionex API keys en Ajustes para ver el balance.</span></div>`;
-      } else {
-        list.innerHTML = `<div class="empty-state"><ion-icon name="cloud-offline-outline"></ion-icon><span>No se pudo obtener el balance.<br><small>${e.message}</small></span></div>`;
-      }
+    const balEl = document.getElementById('totalBalance');
+    if (e.message === 'NO_KEYS') {
+      if (balEl) balEl.textContent = 'Sin API Key';
+      if (list) list.innerHTML = `<div class="empty-state"><ion-icon name="key-outline"></ion-icon><span>Configura tus Pionex API keys en Ajustes para ver el balance.</span></div>`;
+    } else {
+      if (balEl) balEl.textContent = '$—';
+      if (list) list.innerHTML = `<div class="empty-state"><ion-icon name="cloud-offline-outline"></ion-icon><span>No se pudo obtener el balance.<br><small>${e.message}</small></span></div>`;
     }
   }
 
@@ -497,7 +674,7 @@ function renderBalanceAsPositions(data) {
     return sum + free * price;
   }, 0);
   const balEl = document.getElementById('totalBalance');
-  if (balEl && totalVal > 0) balEl.textContent = '$' + totalVal.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (balEl) balEl.textContent = '$' + totalVal.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const items = Object.entries(balances)
     .filter(([coin, b]) => coin !== 'USDT' && parseFloat(b?.free || b || 0) > 0)
@@ -607,6 +784,13 @@ async function placeOrder() {
 async function executeOrder() {
   const ord = APP._pendingOrder;
   if (!ord) return;
+
+  const preflight = await preflightRealTrading({ amountUsdt: ord.amount, context: `orden ${ord.side} ${ord.sym}` });
+  if (!preflight.ok) {
+    toast(preflight.error, 'error');
+    return;
+  }
+
   document.getElementById('confirmOrderOverlay')?.classList.remove('open');
   try {
     await apiFetch('/api/order', {
@@ -621,6 +805,7 @@ async function executeOrder() {
         takeProfit: ord.tp || undefined,
       }),
     });
+    markRealOrderTimestamp();
     toast(`Orden ${ord.side} enviada: ${ord.sym}`, 'success');
     APP._pendingOrder = null;
     setTimeout(loadOrders, 1000);
@@ -660,8 +845,19 @@ function collectBotConfig() {
   };
 }
 
-function startBot() {
+async function startBot() {
   const cfg = collectBotConfig();
+  if (!cfg.dryRun) {
+    const preflight = await preflightRealTrading({
+      amountUsdt: cfg.maxPositionUSD,
+      context: 'bot autonomo en modo real',
+      enforceCooldown: false,
+    });
+    if (!preflight.ok) {
+      toast(preflight.error, 'error');
+      return;
+    }
+  }
   const result = BotEngine.start(cfg);
   if (!result.ok) {
     toast('Error: ' + result.error, 'error');
@@ -818,7 +1014,7 @@ function removeMsgById(id) {
 }
 
 /* ── Settings page ───────────────────────────────────────────── */
-function renderSettingsPage() {
+async function renderSettingsPage() {
   const list = document.getElementById('aiKeyList');
   if (!list) return;
   const cfg = CloudAI.getConfig();
@@ -841,15 +1037,16 @@ function renderSettingsPage() {
   // Restore Pionex API keys
   const pkEl = document.getElementById('settingsPionexKey');
   const psEl = document.getElementById('settingsPionexSecret');
-  const savedPk = localStorage.getItem('pionex_api_key');
-  const savedPs = localStorage.getItem('pionex_api_secret');
+  const { apiKey: savedPk, apiSecret: savedPs } = await getPionexCredentials();
   if (pkEl && savedPk) pkEl.value = savedPk;
   if (psEl && savedPs) psEl.value = savedPs;
+
+  renderRiskSettings();
 
   renderSecuritySettings();
 }
 
-function saveSettings() {
+async function saveSettings() {
   // Proxy URL (optional)
   const serverInput = document.getElementById('serverUrl');
   if (serverInput) {
@@ -861,13 +1058,8 @@ function saveSettings() {
   // Pionex API keys — guardar en localStorage
   const pk = document.getElementById('settingsPionexKey')?.value.trim();
   const ps = document.getElementById('settingsPionexSecret')?.value.trim();
-  if (pk !== undefined) {
-    if (pk) localStorage.setItem('pionex_api_key', pk);
-    else    localStorage.removeItem('pionex_api_key');
-  }
-  if (ps !== undefined) {
-    if (ps) localStorage.setItem('pionex_api_secret', ps);
-    else    localStorage.removeItem('pionex_api_secret');
+  if (pk !== undefined || ps !== undefined) {
+    await savePionexCredentials({ apiKey: pk || '', apiSecret: ps || '' });
   }
   // Cloud AI keys
   document.querySelectorAll('.ai-key-input').forEach(inp => {
@@ -877,6 +1069,11 @@ function saveSettings() {
       CloudAI.setKey(provId, val);
     }
   });
+
+  const risk = collectRiskSettingsFromUI();
+  saveRiskSettings(risk);
+  renderRiskSettings();
+
   toast('Ajustes guardados', 'success');
 }
 

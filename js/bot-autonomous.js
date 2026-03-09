@@ -13,6 +13,8 @@ const BotEngine = (() => {
   const MIN_PROFIT_USDT    = 0.33;
   const TRAILING_PCT       = 0.015;
   const MAX_LOGS           = 200;
+  const LS_RISK_CONTROLS   = 'pionex_risk_controls';
+  const LS_LAST_REAL_ORDER_TS = 'pionex_last_real_order_ts';
 
   /* ── Mutable State ──────────────────────────────────────────── */
   let running         = false;
@@ -55,7 +57,7 @@ const BotEngine = (() => {
 
   /* ── Helpers ────────────────────────────────────────────────── */
   function serverUrl() {
-    return localStorage.getItem('pionex_server') || 'http://localhost:8000';
+    return (localStorage.getItem('pionex_server') || '').trim().replace(/\/$/, '');
   }
 
   function fmt(v, d = 2) {
@@ -375,9 +377,11 @@ const BotEngine = (() => {
   ══════════════════════════════════════════════════════════════ */
 
   async function _botFetchKlines(symbol, interval, limit = 200) {
+    const base = serverUrl();
     try {
+      if (!base) throw new Error('NO_PROXY');
       const resp = await fetch(
-        `${serverUrl()}/api/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
+        `${base}/api/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
         { signal: AbortSignal.timeout(5000) }
       );
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -389,8 +393,10 @@ const BotEngine = (() => {
   }
 
   async function _botFetchTickers() {
+    const base = serverUrl();
     try {
-      const resp = await fetch(`${serverUrl()}/api/tickers`, { signal: AbortSignal.timeout(5000) });
+      if (!base) throw new Error('NO_PROXY');
+      const resp = await fetch(`${base}/api/tickers`, { signal: AbortSignal.timeout(5000) });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const d = await resp.json();
       return d.data?.tickers || d.tickers || [];
@@ -922,13 +928,74 @@ No expliques nada. Solo el JSON entre { y }.`;
   /* ── USDT Balance ───────────────────────────────────────────── */
   async function getUSDTBalance() {
     if (config.dryRun) return virtualUsdt;
+
+    const readUsdt = (data) => {
+      const balances = data?.data?.balances ?? data?.balances ?? data ?? [];
+      if (Array.isArray(balances)) {
+        const row = balances.find(b => {
+          const coin = b?.coin || b?.coinType || b?.asset || b?.currency;
+          return coin === 'USDT';
+        });
+        return row ? parseFloat(row.free || row.available || 0) : 0;
+      }
+      if (balances && typeof balances === 'object') {
+        const usdt = balances.USDT;
+        if (usdt && typeof usdt === 'object') {
+          return parseFloat(usdt.free || usdt.available || 0);
+        }
+        return parseFloat(usdt || 0);
+      }
+      return 0;
+    };
+
+    const base = serverUrl();
     try {
-      const resp = await fetch(`${serverUrl()}/api/balances`, { signal: AbortSignal.timeout(8000) });
+      if (!base) throw new Error('NO_PROXY');
+      const resp = await fetch(`${base}/api/balances`, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      const bals = data.data?.balances || data.balances || [];
-      const usdt = bals.find(b => b.coin === 'USDT' || b.asset === 'USDT');
-      return usdt ? parseFloat(usdt.free || usdt.available || 0) : 0;
-    } catch (_) { return 0; }
+      return readUsdt(data);
+    } catch (_) {
+      try {
+        if (typeof PionexClient !== 'undefined') {
+          const data = await PionexClient.getBalance();
+          return readUsdt(data);
+        }
+      } catch {}
+      return 0;
+    }
+  }
+
+  async function _submitRealOrder(orderBody) {
+    const base = serverUrl();
+    if (!base && typeof PionexClient !== 'undefined') {
+      return PionexClient.handle('/api/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderBody),
+      });
+    }
+
+    try {
+      const resp = await fetch(`${base}/api/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderBody),
+        signal: AbortSignal.timeout(30000),
+      });
+      const result = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(result?.message || `HTTP ${resp.status}`);
+      return result;
+    } catch (e) {
+      if (typeof PionexClient !== 'undefined') {
+        return PionexClient.handle('/api/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderBody),
+        });
+      }
+      throw e;
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1049,6 +1116,21 @@ No expliques nada. Solo el JSON entre { y }.`;
 
   async function _executeReal(symbol, action, amtUSD, price, confidence, score, reason, md) {
     try {
+      const risk = (() => {
+        try { return JSON.parse(localStorage.getItem(LS_RISK_CONTROLS) || '{}'); }
+        catch { return {}; }
+      })();
+      const cooldownSec = Math.max(0, parseFloat(risk?.orderCooldownSec ?? 0) || 0);
+      if (cooldownSec > 0) {
+        const lastTs = parseInt(localStorage.getItem(LS_LAST_REAL_ORDER_TS) || '0', 10) || 0;
+        const remaining = cooldownSec * 1000 - (Date.now() - lastTs);
+        if (remaining > 0) {
+          addLog('warn', `[${symbol}] Cooldown real activo (${Math.ceil(remaining / 1000)}s). Orden omitida.`);
+          sessionStats.holds++;
+          return;
+        }
+      }
+
       if (action === 'BUY') {
         const usdtFree = await getUSDTBalance();
         if (usdtFree < amtUSD) {
@@ -1070,15 +1152,10 @@ No expliques nada. Solo el JSON entre { y }.`;
         orderBody = { symbol, side: 'SELL', type: 'MARKET', size };
       }
 
-      const resp = await fetch(`${serverUrl()}/api/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderBody),
-        signal: AbortSignal.timeout(30000),
-      });
-      const result = await resp.json();
+      const result = await _submitRealOrder(orderBody);
+      const ok = (typeof result?.result === 'boolean') ? result.result : !result?.error;
 
-      if (result.result) {
+      if (ok) {
         const orderId = result.data?.orderId || 'unknown';
         const trade = {
           time: new Date().toISOString().slice(0,19), symbol, side: action,
@@ -1107,6 +1184,7 @@ No expliques nada. Solo el JSON entre { y }.`;
         }
         dailyTradeCount++;
         tradeHistory.push(trade);
+        localStorage.setItem(LS_LAST_REAL_ORDER_TS, String(Date.now()));
         saveState();
       } else {
         addLog('error', `[${symbol}] Orden rechazada: ${result.message || JSON.stringify(result)}`);

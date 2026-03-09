@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#070b11" />
   <!-- Sketchware / Android WebView: deshabilita links automáticos -->
   <meta name="format-detection" content="telephone=no,email=no,address=no" />
-  <title>Trader Bot · Mobile</title>
+  <title>Experimento Trader · Mobile</title>
   <link rel="stylesheet" href="css/styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -21,7 +21,7 @@
   <!-- ══════════════════  TOP STATUS BAR  ══════════════════ -->
   <div class="status-bar" id="statusBar">
     <div class="status-bar-left">
-      <span class="logo-pill"><ion-icon name="diamond-outline"></ion-icon> Trader</span>
+      <span class="logo-pill"><ion-icon name="diamond-outline"></ion-icon> Trader AI</span>
     </div>
     <div class="status-bar-right">
       <span class="conn-indicator" id="connIndicator">
@@ -584,12 +584,16 @@
     <section class="page" id="page-settings">
       <div class="page-scroll">
 
-        <!-- Server config -->
+        <!-- Proxy remoto (opcional) -->
         <div class="settings-group">
-          <div class="settings-group-title">Servidor</div>
+          <div class="settings-group-title">Proxy remoto (opcional)</div>
+          <p class="settings-note">
+            La app funciona directamente desde GitHub Pages sin proxy.<br/>
+            Si despliegas tu propio proxy en Render / Railway / Fly.io, indícalo aquí.
+          </p>
           <div class="settings-item">
-            <label class="cfg-label">URL del backend</label>
-            <input type="text" id="serverUrl" class="text-input" value="http://localhost:8000" placeholder="http://localhost:8000" />
+            <label class="cfg-label">URL del proxy</label>
+            <input type="text" id="serverUrl" class="text-input" value="" placeholder="https://tu-proxy.onrender.com" />
           </div>
           <button class="btn-outline w-full" id="testConnectionBtn">
             <ion-icon name="wifi-outline"></ion-icon> Probar conexión
@@ -608,6 +612,52 @@
             <label class="cfg-label">API Secret</label>
             <input type="password" id="settingsPionexSecret" class="text-input" placeholder="tu-api-secret" autocomplete="off" />
           </div>
+        </div>
+
+        <!-- Go-live real safeguards -->
+        <div class="settings-group">
+          <div class="settings-group-title">Go-Live Real (Seguridad)</div>
+          <div class="risk-status-line" id="riskStatusLine">Trading real bloqueado</div>
+
+          <div class="settings-toggle-row">
+            <span>Habilitar trading real</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="realTradingEnabled" />
+              <span class="toggle-knob"></span>
+            </label>
+          </div>
+
+          <div class="settings-toggle-row">
+            <span>Kill switch (bloqueo total)</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="realKillSwitch" checked />
+              <span class="toggle-knob"></span>
+            </label>
+          </div>
+
+          <div class="settings-item">
+            <label class="cfg-label">Límite por orden (USDT)</label>
+            <input type="number" id="maxOrderUsdt" class="text-input" value="100" min="1" step="1" />
+          </div>
+
+          <div class="settings-item">
+            <label class="cfg-label">Cooldown entre órdenes reales (seg)</label>
+            <input type="number" id="orderCooldownSec" class="text-input" value="45" min="0" step="1" />
+          </div>
+
+          <div class="settings-toggle-row">
+            <span>Confirmación manual obligatoria</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="requirePhraseConfirm" checked />
+              <span class="toggle-knob"></span>
+            </label>
+          </div>
+
+          <div class="settings-note" style="margin-top:4px">Checklist mínimo antes de operar en real:</div>
+          <label class="check-row"><input type="checkbox" id="chkApiPerm" /> API key con permisos solo de `trade` y sin retiros</label>
+          <label class="check-row"><input type="checkbox" id="chkIpWhitelist" /> IP whitelist configurada (proxy o dispositivo controlado)</label>
+          <label class="check-row"><input type="checkbox" id="chkSmallSize" /> Primera sesión con tamaño pequeño verificado</label>
+          <label class="check-row"><input type="checkbox" id="chkEmergencyPlan" /> Plan de emergencia y stop manual definidos</label>
         </div>
 
         <!-- Cloud AI settings (per provider) -->
@@ -688,7 +738,7 @@
           <ion-icon name="save-outline"></ion-icon> Guardar ajustes
         </button>
 
-        <div class="app-version">Pionex Bot · Mobile v1.0 · 2025</div>
+        <div class="app-version">Experimento Trader · Mobile v1.0 · 2025</div>
 
       </div>
     </section>

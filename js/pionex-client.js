@@ -179,59 +179,39 @@ const PionexClient = (() => {
     return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  /* ── Fetch autenticado con fallback CORS proxy ────────────── */
+  async function _authFetch(url, headers, opts = {}) {
+    try {
+      const r = await fetch(url, { ...opts, headers, signal: AbortSignal.timeout(12000) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r;
+    } catch (_) {
+      // CORS / red bloqueada → reintento vía proxy CORS (mismo patrón que request())
+      return fetch(CPROXY + encodeURIComponent(url), {
+        ...opts,
+        headers,
+        signal: AbortSignal.timeout(14000),
+      });
+    }
+  }
+
   /* ── Balances autenticados ──────────────────────────────────── */
   async function getBalance() {
     const { apiKey, apiSecret } = await _getPionexCreds();
     if (!apiKey || !apiSecret) {
-      const e = new Error('NO_KEYS');
-      throw e;
+      throw new Error('NO_KEYS');
     }
     const timestamp   = Date.now().toString();
-    const path        = '/api/v1/account/balances';
     const queryString = `timestamp=${timestamp}`;
+    const signature   = await _hmacHex(apiSecret, queryString);
+    const url = `${BASE}/account/balances?${queryString}&signature=${signature}`;
+    const headers = { 'PIONEX-KEY': apiKey, 'Accept': 'application/json' };
 
-    // Pionex admite dos variantes de firma; probar ambas (igual que createOrder).
-    // Si el fetch directo es bloqueado por CORS (entorno GitHub Pages / browser),
-    // reintenta automáticamente vía corsproxy.io que:
-    //  · Responde al preflight OPTIONS con Access-Control-Allow-Headers: *
-    //  · Reenvía PIONEX-KEY a Pionex en una llamada servidor→servidor (sin CORS)
-    // Seguridad: la clave secreta nunca sale del navegador (solo se usa para el HMAC local).
-    async function tryFetch(signMsg, viaCorsProxy = false) {
-      const signature = await _hmacHex(apiSecret, signMsg);
-      const targetUrl = `${BASE}/account/balances?${queryString}&signature=${signature}`;
-      const fetchUrl  = viaCorsProxy ? CPROXY + encodeURIComponent(targetUrl) : targetUrl;
-      const resp = await fetch(fetchUrl, {
-        headers: { 'PIONEX-KEY': apiKey, 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(viaCorsProxy ? 16000 : 12000),
-      });
-      return resp;
-    }
-
-    async function tryWithFallback(signMsg) {
-      try {
-        return await tryFetch(signMsg, false);
-      } catch {
-        // Fallo de red / CORS → reintento transparente vía corsproxy.io
-        return tryFetch(signMsg, true);
-      }
-    }
-
-    // Intento 1: firma solo sobre queryString
-    let resp = await tryWithFallback(queryString);
-
-    // Intento 2: si la firma falla, probar con path incluido
+    const resp = await _authFetch(url, headers);
     if (!resp.ok) {
-      const body1 = await resp.json().catch(() => ({}));
-      const msg1  = String(body1?.message || '').toLowerCase();
-      if (msg1.includes('signature') || resp.status === 401 || resp.status === 403) {
-        resp = await tryWithFallback(`${path}?${queryString}`);
-      }
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => ({}));
-        throw new Error(errBody?.message || `HTTP ${resp.status}`);
-      }
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody?.message || `HTTP ${resp.status}`);
     }
-
     const data = await resp.json();
     const balances = {};
     (data?.data?.balances ?? data?.balances ?? []).forEach(b => {
@@ -290,16 +270,14 @@ const PionexClient = (() => {
     const queryString = `timestamp=${timestamp}`;
     async function submitWithSignature(basePayload) {
       const signature = await _hmacHex(apiSecret, basePayload);
-      const resp = await fetch(`${BASE}/trade/order?${queryString}&signature=${signature}`, {
-        method: 'POST',
-        headers: {
-          'PIONEX-KEY': apiKey,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(orderBody),
-        signal: AbortSignal.timeout(15000),
-      });
+      const url = `${BASE}/trade/order?${queryString}&signature=${signature}`;
+      const headers = {
+        'PIONEX-KEY': apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      const fetchOpts = { method: 'POST', body: JSON.stringify(orderBody) };
+      const resp = await _authFetch(url, headers, fetchOpts);
       const data = await resp.json().catch(() => ({}));
       const ok = resp.ok && data?.result !== false;
       return { ok, resp, data };

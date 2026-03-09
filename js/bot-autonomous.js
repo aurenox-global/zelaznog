@@ -370,23 +370,43 @@ const BotEngine = (() => {
   }
 
   /* ══════════════════════════════════════════════════════════════
+     MARKET DATA HELPERS — proxy-first, PionexClient fallback
+     Works regardless of APP.directMode state.
+  ══════════════════════════════════════════════════════════════ */
+
+  async function _botFetchKlines(symbol, interval, limit = 200) {
+    try {
+      const resp = await fetch(
+        `${serverUrl()}/api/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return resp.json();
+    } catch (_) {
+      if (typeof PionexClient === 'undefined') throw _;
+      return PionexClient.getKlines(symbol, interval, limit);
+    }
+  }
+
+  async function _botFetchTickers() {
+    try {
+      const resp = await fetch(`${serverUrl()}/api/tickers`, { signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const d = await resp.json();
+      return d.data?.tickers || d.tickers || [];
+    } catch (_) {
+      if (typeof PionexClient === 'undefined') throw _;
+      return PionexClient.getTickers();
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════
      MARKET DATA FETCH  (full port of get_market_data())
   ══════════════════════════════════════════════════════════════ */
 
   async function getMarketData(symbol) {
     try {
-      let data;
-      if (typeof PionexClient !== 'undefined' && APP?.directMode) {
-        // Modo directo: proxy no disponible (e.g. GitHub Pages) → api.pionex.com
-        data = await PionexClient.getKlines(symbol, config.interval, 200);
-      } else {
-        const resp = await fetch(
-          `${serverUrl()}/api/klines?symbol=${symbol}&interval=${config.interval}&limit=200`,
-          { signal: AbortSignal.timeout(10000) }
-        );
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        data = await resp.json();
-      }
+      const data = await _botFetchKlines(symbol, config.interval, 200);
       const klines = data.data?.klines || data.klines || [];
       if (klines.length < 30) return null;
 
@@ -485,18 +505,8 @@ const BotEngine = (() => {
     const results = {};
     await Promise.all(tfs.map(async tf => {
       try {
-        let klines;
-        if (typeof PionexClient !== 'undefined' && APP?.directMode) {
-          const data = await PionexClient.getKlines(symbol, tf, 100);
-          klines = data.klines || [];
-        } else {
-          const resp = await fetch(
-            `${serverUrl()}/api/klines?symbol=${symbol}&interval=${tf}&limit=100`,
-            { signal: AbortSignal.timeout(8000) }
-          );
-          const data = await resp.json();
-          klines = data.data?.klines || data.klines || [];
-        }
+        const raw = await _botFetchKlines(symbol, tf, 100);
+        const klines = raw.data?.klines || raw.klines || [];
         if (klines.length < 30) return;
         const closes = klines.map(k => parseFloat(k.close));
         const highs  = klines.map(k => parseFloat(k.high));
@@ -841,14 +851,7 @@ No expliques nada. Solo el JSON entre { y }.`;
 
   async function selectBestSymbols() {
     try {
-      let tickers;
-      if (typeof PionexClient !== 'undefined' && APP?.directMode) {
-        tickers = await PionexClient.getTickers();
-      } else {
-        const resp = await fetch(`${serverUrl()}/api/tickers`, { signal: AbortSignal.timeout(15000) });
-        const data = await resp.json();
-        tickers = data.data?.tickers || data.tickers || [];
-      }
+      const tickers = await _botFetchTickers();
 
       const candidates = tickers
         .filter(t =>
@@ -1144,16 +1147,8 @@ No expliques nada. Solo el JSON entre { y }.`;
 
     for (const [symbol, pos] of Object.entries({ ...openPositions })) {
       try {
-        let tickers;
-        if (typeof PionexClient !== 'undefined' && APP?.directMode) {
-          const all = await PionexClient.getTickers();
-          tickers = all.filter(t => t.symbol === symbol);
-        } else {
-          const resp = await fetch(`${serverUrl()}/api/tickers?symbol=${symbol}`,
-            { signal: AbortSignal.timeout(5000) });
-          const data = await resp.json();
-          tickers = data.data?.tickers || data.tickers || [];
-        }
+        const allTickers = await _botFetchTickers();
+        const tickers = allTickers.filter(t => t.symbol === symbol);
         if (!tickers.length) continue;
         const curPrice = parseFloat(tickers[0].close || 0);
         if (!curPrice) continue;

@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
    Experimento Trader — Mobile Frontend App
-   Connects to the local FastAPI backend (localhost:8000)
+   GitHub Pages · acceso directo a api.pionex.com desde el browser
    Uses CloudAI module for AI analysis via cloud providers
    ═══════════════════════════════════════════════════════════════ */
 
@@ -17,14 +17,10 @@
      ws.setDomStorageEnabled(true);           // localStorage
      ws.setAllowFileAccessFromFileURLs(true); // si cargas desde assets
      ws.setAllowUniversalAccessFromFileURLs(true);
-     ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW); // HTTP proxy
      wv.addJavascriptInterface(new TraderInterface(this), "Android");
      wv.loadUrl("file:///android_asset/index.html");
-     // O: wv.loadUrl("http://<tu-proxy>:8000");
 
    La clase TraderInterface expone métodos con @JavascriptInterface.
-   Desde Sketchware puedes llamar a JS con:
-     wv.evaluateJavascript("TraderApp.setServer('http://192.168.1.x:8000')", null);
    ══════════════════════════════════════════════════════════════ */
 const TraderApp = (() => {
   const isWebView = !!(
@@ -60,8 +56,8 @@ window.TraderApp = TraderApp;
 
 /* ── Config & State ──────────────────────────────────────────── */
 const APP = {
-  serverUrl: localStorage.getItem('pionex_server') || 'http://localhost:8000',
-  directMode: false,   // true cuando el proxy no está disponible (e.g. GitHub Pages)
+  serverUrl: localStorage.getItem('pionex_server') || '',
+  directMode: true,    // acceso directo a api.pionex.com (GitHub Pages)
   currentPage: localStorage.getItem('pionex_page') || 'dashboard',
   selectedSymbol: localStorage.getItem('pionex_sym') || 'BTC_USDT',
   selectedInterval: '15M',
@@ -827,26 +823,31 @@ function renderSettingsPage() {
   const serverInput = document.getElementById('serverUrl');
   if (serverInput) serverInput.value = APP.serverUrl;
 
+  // Restore Pionex API keys
+  const pkEl = document.getElementById('settingsPionexKey');
+  const psEl = document.getElementById('settingsPionexSecret');
+  const savedPk = localStorage.getItem('pionex_api_key');
+  const savedPs = localStorage.getItem('pionex_api_secret');
+  if (pkEl && savedPk) pkEl.value = savedPk;
+  if (psEl && savedPs) psEl.value = savedPs;
+
   renderSecuritySettings();
 }
 
 function saveSettings() {
-  // Server URL
+  // Proxy URL (optional)
   const serverInput = document.getElementById('serverUrl');
   if (serverInput) {
     APP.serverUrl = serverInput.value.trim().replace(/\/$/, '');
     localStorage.setItem('pionex_server', APP.serverUrl);
+    // Si hay URL de proxy configurada, usarla; si no, modo directo
+    APP.directMode = !APP.serverUrl;
   }
-  // Pionex API keys (sent to backend)
+  // Pionex API keys — guardar en localStorage
   const pk = document.getElementById('settingsPionexKey')?.value.trim();
   const ps = document.getElementById('settingsPionexSecret')?.value.trim();
-  if (pk && ps) {
-    apiFetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey: pk, apiSecret: ps }),
-    }).catch(() => {});
-  }
+  if (pk) localStorage.setItem('pionex_api_key', pk);
+  if (ps) localStorage.setItem('pionex_api_secret', ps);
   // Cloud AI keys
   document.querySelectorAll('.ai-key-input').forEach(inp => {
     const provId = inp.dataset.prov;
@@ -955,15 +956,6 @@ function showPinOverlay() {
 
 /* ── Init & Event Bindings ───────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
-  // ── Auto-detectar proxy: si no responde en 3 s, activar modo directo
-  try {
-    const hc = await fetch(APP.serverUrl + '/api/health', { signal: AbortSignal.timeout(3000) });
-    APP.directMode = !hc.ok;
-  } catch {
-    APP.directMode = true;
-  }
-  if (APP.directMode) console.info('[Pionex] Proxy no disponible — modo directo (api.pionex.com)');
-
   // ── Crypto init: si hay PIN configurado, mostrar overlay de desbloqueo
   await CloudAI.init();
   if (typeof CryptoStore !== 'undefined' && CryptoStore.hasPIN() && !CryptoStore.isUnlocked()) {

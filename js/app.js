@@ -463,14 +463,18 @@ function renderSymPickerList(filter) {
 
 /* ── Orders & Positions ──────────────────────────────────────── */
 async function loadOrders() {
-  if (APP.directMode) {
-    const list = document.getElementById('positionsList');
-    if (list) list.innerHTML = `<div class="empty-state"><ion-icon name="cloud-offline-outline"></ion-icon><span>Balance no disponible en modo directo.<br>Configura un servidor proxy con tu API de Pionex.</span></div>`;
-  } else {
-    try {
-      const data = await apiFetch('/api/balances');
-      renderBalanceAsPositions(data);
-    } catch {}
+  const list = document.getElementById('positionsList');
+  try {
+    const data = await apiFetch('/api/balances');
+    renderBalanceAsPositions(data);
+  } catch (e) {
+    if (list) {
+      if (e.message === 'NO_KEYS') {
+        list.innerHTML = `<div class="empty-state"><ion-icon name="key-outline"></ion-icon><span>Configura tus Pionex API keys en Ajustes para ver el balance.</span></div>`;
+      } else {
+        list.innerHTML = `<div class="empty-state"><ion-icon name="cloud-offline-outline"></ion-icon><span>No se pudo obtener el balance.<br><small>${e.message}</small></span></div>`;
+      }
+    }
   }
 
   // Try to get recent orders from DB
@@ -484,6 +488,17 @@ function renderBalanceAsPositions(data) {
   const list = document.getElementById('positionsList');
   if (!list) return;
   const balances = data.balances || data || {};
+
+  // Actualizar balance total en el dashboard
+  const usdt = parseFloat(balances?.USDT?.free ?? balances?.USDT ?? 0);
+  const totalVal = Object.entries(balances).reduce((sum, [coin, b]) => {
+    const free  = parseFloat(b?.free ?? b ?? 0);
+    const price = parseFloat(APP.tickers[`${coin}_USDT`]?.close ?? (coin === 'USDT' ? 1 : 0));
+    return sum + free * price;
+  }, 0);
+  const balEl = document.getElementById('totalBalance');
+  if (balEl && totalVal > 0) balEl.textContent = '$' + totalVal.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   const items = Object.entries(balances)
     .filter(([coin, b]) => coin !== 'USDT' && parseFloat(b?.free || b || 0) > 0)
     .slice(0, 8);
@@ -846,8 +861,14 @@ function saveSettings() {
   // Pionex API keys — guardar en localStorage
   const pk = document.getElementById('settingsPionexKey')?.value.trim();
   const ps = document.getElementById('settingsPionexSecret')?.value.trim();
-  if (pk) localStorage.setItem('pionex_api_key', pk);
-  if (ps) localStorage.setItem('pionex_api_secret', ps);
+  if (pk !== undefined) {
+    if (pk) localStorage.setItem('pionex_api_key', pk);
+    else    localStorage.removeItem('pionex_api_key');
+  }
+  if (ps !== undefined) {
+    if (ps) localStorage.setItem('pionex_api_secret', ps);
+    else    localStorage.removeItem('pionex_api_secret');
+  }
   // Cloud AI keys
   document.querySelectorAll('.ai-key-input').forEach(inp => {
     const provId = inp.dataset.prov;

@@ -147,10 +147,47 @@ const PionexClient = (() => {
     return { indicators: _computeIndicators(raw?.data?.klines ?? []) };
   }
 
+  /* ── HMAC-SHA256 con Web Crypto API ───────────────────────────── */
+  async function _hmacHex(secret, message) {
+    const enc = new TextEncoder();
+    const k   = await crypto.subtle.importKey(
+      'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    );
+    const sig = await crypto.subtle.sign('HMAC', k, enc.encode(message));
+    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /* ── Balances autenticados ──────────────────────────────────── */
+  async function getBalance() {
+    const apiKey    = localStorage.getItem('pionex_api_key')    || '';
+    const apiSecret = localStorage.getItem('pionex_api_secret') || '';
+    if (!apiKey || !apiSecret) {
+      const e = new Error('NO_KEYS');
+      throw e;
+    }
+    const timestamp   = Date.now().toString();
+    const queryString = `timestamp=${timestamp}`;
+    const signature   = await _hmacHex(apiSecret, queryString);
+    const url = `${BASE}/account/balances?${queryString}&signature=${signature}`;
+    const resp = await fetch(url, {
+      headers: { 'PIONEX-KEY': apiKey, 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody?.message || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    const balances = {};
+    (data?.data?.balances ?? data?.balances ?? []).forEach(b => {
+      const coin = b.coinType ?? b.coin ?? b.currency;
+      if (coin) balances[coin] = { free: b.free ?? '0', locked: b.frozen ?? b.locked ?? '0' };
+    });
+    return { balances };
+  }
+
   /**
    * Router único — acepta el mismo path+querystring que apiFetch().
-   * Ejemplo: PionexClient.handle('/api/tickers')
-   *          PionexClient.handle('/api/klines?symbol=BTC_USDT&interval=15M&limit=200')
    */
   async function handle(path) {
     const sep      = path.indexOf('?');
@@ -162,14 +199,14 @@ const PionexClient = (() => {
     if (pathname === '/api/klines')     return getKlines(q.symbol || 'BTC_USDT', q.interval || '15M', q.limit);
     if (pathname === '/api/indicators') return getIndicators(q.symbol || 'BTC_USDT', q.interval || '15M');
     if (pathname === '/api/symbols')    return getTickers().then(list => list.map(t => t.symbol));
+    if (pathname === '/api/balances')   return getBalance();
 
-    // Rutas autenticadas — no disponibles en modo directo (devuelven vacío seguro)
     if (pathname === '/api/orders' || pathname === '/api/ai/trades') return { orders: [] };
     if (pathname.startsWith('/api/')) return [];
 
     throw new Error(`Ruta no soportada en modo directo: ${pathname}`);
   }
 
-  return { handle, getTickers, getKlines, getIndicators };
+  return { handle, getTickers, getKlines, getIndicators, getBalance };
 
 })();
